@@ -8,6 +8,11 @@ class Vect {
         this.y = y || 0;
         this.rad = 5;
     }
+    // Set values of vector coordinate.
+    set(x, y) {
+        this.x = x;
+        this.y = y;
+    }
     // replace values of vector with given vector
     equ (A) {
         this.x = A.x;
@@ -66,6 +71,16 @@ class Vect {
     unit () {
         return this.mag() > 0 ? this.div(this.mag()) : new Vect();
     }
+    // Return vector in string form.
+    log()
+    {
+        return "(" + this.x.toFixed(3) + ", " + this.y.toFixed(3) + ")";
+    }
+    // Check if vector is near a coordinate within a radius.
+    isNear(pos, rad)
+    {
+        return this.sub(pos).mag() < rad;
+    }
 };
 
 class Mass
@@ -77,11 +92,12 @@ class Mass
         this.force = new Vect();
         this.rad = rad;
         this.fix = isFixed || false;
+        this.ignore = false;
         this.adj = []; // Holds adjacent masses and springs.
     }
     move(f, fric)
     {
-        if (!this.fix)
+        if (!this.fix && !this.ignore)
         {
             this.vel.sumTo(this.force.sum(f));
             this.pos.sumTo(this.vel.mul(fric));
@@ -121,6 +137,7 @@ class Spring
     }
     draw(ctx, posA, posB)
     {
+        ctx.strokeStyle = "black";
         ctx.beginPath();
         ctx.moveTo(posA.x, posA.y);
         ctx.lineTo(posB.x, posB.y);
@@ -152,6 +169,11 @@ class Model
             this.m[A].adj.push({m: this.m[B], s: spr});
             this.m[B].adj.push({m: this.m[A], s: spr});
         }
+    }
+    // Returns mass nearest to a vector coordinate within a radius.
+    locateMass(pos, rad)
+    {
+        return this.m.find(mass => mass.pos.isNear(pos, rad));
     }
     update(bx, by, bw, bh)
     {
@@ -231,8 +253,64 @@ class Model
 const canvas = document.getElementById("OCWindow");
 const ctx = canvas.getContext("2d");
 
+
 // Initialize model
-const model = new Model(0.1, 1, 0.1, 0.8, 0.2);
+const model = new Model(0.5, 1, 0.1, 0.75, 0.1);
+
+// Initialize mousing events.
+const userState = {
+    mousePos: new Vect(),
+    highlight: undefined,
+    select: undefined,
+    drag: undefined,
+    drawHighlight: function() {
+        if (this.highlight) {
+            const x = this.highlight.pos.x;
+            const y = this.highlight.pos.y;
+            const r = this.highlight.rad;
+            ctx.strokeStyle = "grey";
+            ctx.beginPath();
+            ctx.arc(x, y, r + 5, 0, 2 * Math.PI);
+            ctx.stroke();
+            ctx.closePath();
+        }
+    },
+    drawSelect: function() {
+        if (this.select)
+        {
+            const x = this.select.pos.x;
+            const y = this.select.pos.y;
+            const r = this.select.rad;
+            ctx.strokeStyle = "black";
+            ctx.beginPath();
+            ctx.arc(x, y, r + 5, 0, 2 * Math.PI);
+            ctx.stroke();
+            ctx.closePath();
+        }
+    },
+    drawStatusLog: function(x, y) {
+        ctx.fillText(this.mousePos.log(), x, y);
+    }
+};
+canvas.addEventListener("mousemove", event => {
+    const b = canvas.getBoundingClientRect();
+    userState.mousePos.set(event.clientX - b.left, event.clientY - b.top);
+    userState.highlight = model.locateMass(userState.mousePos, 10);
+    if (userState.drag){
+        userState.drag.pos.sumTo(new Vect(event.movementX, event.movementY));
+        userState.drag.ignore = true;
+    }
+});
+canvas.addEventListener("mousedown", event => {
+    userState.select = model.locateMass(userState.mousePos, 10);
+    userState.drag = userState.select;
+});
+canvas.addEventListener("mouseup", event => {
+    if (userState.drag) {
+        userState.drag.ignore = false;
+        userState.drag = undefined;
+    }
+});
 
 // Build model
 const origin = {x: canvas.width / 2, y: canvas.height / 2};
@@ -252,8 +330,12 @@ model.addSpring(1, 3, new Spring(Math.sqrt(100 * 100 + 100 * 100)));
 const frame = () => {
     ctx.clearRect(0, 0, canvas.width, canvas.height);
 
+    userState.drawStatusLog(20, 20);
+    userState.drawHighlight();
+    userState.drawSelect();
     model.draw(ctx);
     model.update(0, 0, canvas.width, canvas.height);
+
 
     window.requestAnimationFrame(frame);
 }
