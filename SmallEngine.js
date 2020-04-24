@@ -78,7 +78,7 @@ class Vect {
     // Check if vector is near a coordinate within a radius.
     isNear(pos, rad)
     {
-        return this.sub(pos).mag() < rad;
+        return Math.abs(this.x - pos.x) < rad && Math.abs(this.y - pos.y) < rad;
     }
 };
 
